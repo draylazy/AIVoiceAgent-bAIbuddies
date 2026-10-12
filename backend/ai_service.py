@@ -338,12 +338,32 @@ def _conversational_offline_engine(chat_history: List[Dict[str, str]], mode: str
     
     if any(q in msg_lower for q in ["hear me", "can you hear", "test", "testing", "mic check", "are you there"]):
         return {
-            "text": "Yes, I hear you loud and clear! I'm FitBuddy, your equipment-aware fitness coach. What workout goals or equipment are we working with today?"
+            "text": "Yes, I hear you loud and clear! I'm FitBuddy, your equipment-aware fitness coach. What workout goals or equipment are we working with today?",
+            "suggestions": ["I have dumbbells", "Bodyweight only", "Full gym setup", "Build muscle"]
         }
         
     if any(q in msg_lower for q in ["hello", "hi", "hey", "who are you", "what can you do", "what is your name"]):
         return {
-            "text": "Hey there! I'm FitBuddy, your AI fitness coach. I can design customized workout plans based on the equipment you actually have. Tell me what gear you have around, or ask me any workout question!"
+            "text": "Hey there! I'm FitBuddy, your AI fitness coach. I can design customized workout plans based on the equipment you actually have. Tell me what gear you have around, or ask me any workout question!",
+            "suggestions": ["Build muscle", "Lose weight", "I only have dumbbells", "Plan a 3-day split"]
+        }
+
+    if any(q in msg_lower for q in ["harder", "make it harder", "intensity", "more challenging", "more difficult", "too easy"]):
+        return {
+            "text": "To ramp up the challenge, we can increase training volume with extra sets, shorten your rest periods, or incorporate supersets and drop sets. Which direction would you prefer?",
+            "suggestions": ["Increase volume & sets", "Shorter rest periods", "Supersets & drop sets", "Heavier weight"]
+        }
+
+    if any(q in msg_lower for q in ["swap", "replace", "substitute", "different exercise", "change exercise"]):
+        return {
+            "text": "We can easily swap exercises! Would you like a dumbbell variation, a bodyweight alternative, or a lower-impact movement?",
+            "suggestions": ["Swap for dumbbells", "Bodyweight alternative", "Low impact variation", "Focus on arms"]
+        }
+
+    if any(q in msg_lower for q in ["rest day", "recovery", "rest"]):
+        return {
+            "text": "Rest is crucial for rebuilding muscle! Do you prefer active recovery like walking and mobility, or a complete rest day?",
+            "suggestions": ["Active recovery & walking", "Complete rest day", "Mobility & stretching"]
         }
         
     if any(q in msg_lower for q in ["plan", "workout", "routine", "exercise", "give me", "create", "start", "training", "program"]):
@@ -355,14 +375,16 @@ def _conversational_offline_engine(chat_history: List[Dict[str, str]], mode: str
             plan = _generate_mock_meal_plan(None)
             return {
                 "text": "I've created a personalized meal plan for you! Check out your nutrition guide on the right. Bon appétit!",
-                "plan_data": plan
+                "plan_data": plan,
+                "suggestions": ["Higher protein meals", "Quick meal prep", "Add healthy snacks", "Adjust calories"]
             }
         else:
             plan = _generate_mock_plan(None, eligible)
             equip_str = ", ".join(detected_equip) if detected_equip else "bodyweight only"
             return {
                 "text": f"I've created a personalized workout plan for you using {equip_str}! Check out your routine and coaching tips on the right. Let's get moving!",
-                "plan_data": plan
+                "plan_data": plan,
+                "suggestions": ["Make it harder", "Swap an exercise", "Add a 4th day", "Focus on arms"]
             }
         
     new_equip = _detect_equipment_in_text(msg_lower)
@@ -370,42 +392,51 @@ def _conversational_offline_engine(chat_history: List[Dict[str, str]], mode: str
         if new_equip:
             gear = ", ".join(new_equip)
             return {
-                "text": f"Got it, {gear}! That's plenty to get a great session in. Would you like a full-body workout or should we focus on a specific muscle group?"
+                "text": f"Got it, {gear}! That's plenty to get a great session in. Would you like a full-body workout or should we focus on a specific muscle group?",
+                "suggestions": ["Full-body workout", "Chest & Triceps", "Back & Biceps", "Leg day"]
             }
         else:
             return {
-                "text": "Bodyweight workouts are fantastic for building functional strength, endurance, and mobility! Ready for me to generate your bodyweight plan?"
+                "text": "Bodyweight workouts are fantastic for building functional strength, endurance, and mobility! Ready for me to generate your bodyweight plan?",
+                "suggestions": ["Generate bodyweight plan", "Push Pull Legs", "High intensity circuit"]
             }
             
     if "push up" in msg_lower or "pushup" in msg_lower:
         return {
-            "text": "For clean push-ups, keep your body in a straight plank, tuck your elbows at a 45-degree angle, and lower your chest until it almost touches the floor. Push up explosively!"
+            "text": "For clean push-ups, keep your body in a straight plank, tuck your elbows at a 45-degree angle, and lower your chest until it almost touches the floor. Push up explosively!",
+            "suggestions": ["Diamond push-ups", "Decline push-ups", "How many reps?", "Chest workout"]
         }
     if "squat" in msg_lower:
         return {
-            "text": "For great squat form, keep your chest proud, feet shoulder-width apart, and sit back into your hips while tracking your knees over your toes. Drive up through your heels."
+            "text": "For great squat form, keep your chest proud, feet shoulder-width apart, and sit back into your hips while tracking your knees over your toes. Drive up through your heels.",
+            "suggestions": ["Goblet squats", "Bulgarian split squats", "Fix knee discomfort", "Leg day routine"]
         }
     if "plank" in msg_lower:
         return {
-            "text": "When holding a plank, brace your abs like you're taking a punch, squeeze your glutes, and keep a straight line from your shoulders down to your heels."
+            "text": "When holding a plank, brace your abs like you're taking a punch, squeeze your glutes, and keep a straight line from your shoulders down to your heels.",
+            "suggestions": ["Side planks", "Plank jacks", "Core workout routine", "Increase duration"]
         }
     if "cardio" in msg_lower or "lose weight" in msg_lower or "fat" in msg_lower:
         return {
-            "text": "For fat loss and cardio health, combine regular resistance training with daily steps and a moderate caloric deficit. Consistency wins every time!"
+            "text": "For fat loss and cardio health, combine regular resistance training with daily steps and a moderate caloric deficit. Consistency wins every time!",
+            "suggestions": ["HIIT workout", "Steady state cardio", "Caloric deficit guide", "Daily step routine"]
         }
     if "muscle" in msg_lower or "bulk" in msg_lower or "gains" in msg_lower:
         return {
-            "text": "To build muscle, focus on progressive overload with 8 to 12 challenging reps per set, eat plenty of protein, and make sure you get 7 to 9 hours of quality sleep."
+            "text": "To build muscle, focus on progressive overload with 8 to 12 challenging reps per set, eat plenty of protein, and make sure you get 7 to 9 hours of quality sleep.",
+            "suggestions": ["Hypertrophy rep ranges", "High protein meal plan", "Progressive overload guide"]
         }
         
     if any(q in msg_lower for q in ["thank", "thanks", "awesome", "great", "cool", "let's go", "ready", "good"]):
         return {
-            "text": "You're very welcome! I'm here whenever you need form tips, workout motivation, or plan adjustments. Just tap Push to Talk!"
+            "text": "You're very welcome! I'm here whenever you need form tips, workout motivation, or plan adjustments. Just tap Push to Talk!",
+            "suggestions": ["Make plan harder", "Swap an exercise", "Plan a 3-day split"]
         }
         
     clean_msg = last_message.rstrip(".?!")
     return {
-        "text": f"I heard you say '{clean_msg}'. As your fitness coach, I'm here to build routines tailored to your equipment and goals. What equipment do you have ready, or what exercises would you like to do?"
+        "text": f"I heard you say '{clean_msg}'. As your fitness coach, I'm here to build routines tailored to your equipment and goals. What equipment do you have ready, or what exercises would you like to do?",
+        "suggestions": ["I have dumbbells", "Bodyweight only", "Full gym setup", "Build muscle"]
     }
 
 def _generate_groq_dynamic_plan_from_chat(chat_history: List[Dict[str, str]], mode: str = "fitness") -> Union[WorkoutPlanData, MealPlanData]:
@@ -698,6 +729,15 @@ You MUST NOT speak the meal plan. Instead, you MUST, WITHOUT FAIL, append this e
 
 Example: 'Let\'s switch gears and build some serious muscle with a high-protein diet! Click the "Your Meal Plan" button to view it. [GENERATE_PLAN]'
 
+- CRITICAL SUGGESTION PILLS INSTRUCTION:
+At the very end of your response, ALWAYS provide 2 to 4 concise, context-aware suggestion pills (1-4 words each) representing the exact options or follow-ups the user would want next based on your response and question.
+Format strictly at the very end as:
+[SUGGESTIONS: Option 1 | Option 2 | Option 3]
+Examples:
+- If you ask about meal goals or preferences: [SUGGESTIONS: High protein | Low carb | Quick meal prep | Under 500 kcal]
+- If you just generated a meal plan: [SUGGESTIONS: More protein | Easy prep tips | Adjust macros | Add healthy snacks]
+- If you ask about budget or ingredients: [SUGGESTIONS: Budget friendly | Chicken & rice | Plant based | No dairy]
+
 Do NOT add the tag for simple food tips or single recipe questions.
 Never say "I heard you say..." — respond naturally as a chef would."""
     
@@ -727,9 +767,26 @@ You MUST NOT speak the routine. Instead, you MUST, WITHOUT FAIL, append this exa
 
 Example: 'Sure thing, here is a David Laid style 3-day arm split! Click the "Your Workout" button to view it. [GENERATE_PLAN]'
 
-Do NOT add the tag for simple form tips or single exercise questions.
+- CRITICAL SUGGESTION PILLS INSTRUCTION:
+At the very end of your response, ALWAYS provide 2 to 4 concise, context-aware suggestion pills (1-4 words each) representing the exact options or follow-ups the user would want next based on your response and question.
+Format strictly at the very end as:
+[SUGGESTIONS: Option 1 | Option 2 | Option 3]
+Examples:
+- If you ask about experience level: [SUGGESTIONS: Beginner | Intermediate | Professional]
+- If you ask about making a routine harder: [SUGGESTIONS: Add more volume | Increase intensity | Advanced techniques | Chest & Triceps]
+- If you ask which muscle group or day: [SUGGESTIONS: Chest & Triceps | Back & Biceps | Leg day | Shoulders]
+- If you ask about rest days: [SUGGESTIONS: Active rest | Complete rest]
+- If the user asks about an exercise or form: [SUGGESTIONS: How many sets & reps? | Alternative exercise | Form cues | Next workout]
 Never say "I heard you say..." — respond naturally as a coach would."""
 
+def _extract_suggestions_from_text(text: str) -> tuple[str, List[str]]:
+    suggestions = []
+    match = re.search(r'\[SUGGESTIONS:\s*(.*?)\]', text, re.IGNORECASE)
+    if match:
+        raw_items = match.group(1).split('|')
+        suggestions = [item.strip().strip('"').strip("'") for item in raw_items if item.strip()]
+        text = re.sub(r'\[SUGGESTIONS:\s*.*?\]', '', text, flags=re.IGNORECASE).strip()
+    return text, suggestions
 
 def _generate_groq_chat(chat_history: List[Dict[str, str]], mode: str = "fitness") -> Dict[str, Any]:
     client = Groq(api_key=os.getenv("GROQ_API_KEY"))
@@ -754,11 +811,12 @@ def _generate_groq_chat(chat_history: List[Dict[str, str]], mode: str = "fitness
     # Final strict reminder to prevent the LLM from forgetting the tag
     messages.append({
         "role": "system",
-        "content": "CRITICAL REMINDER: If the user just asked you to create, modify, update, or change a plan, you MUST append the exact string [GENERATE_PLAN] at the very end of your response. Do not forget this!"
+        "content": "CRITICAL REMINDER: If the user just asked you to create, modify, update, or change a plan, you MUST append the exact string [GENERATE_PLAN] at the very end of your response. Also append [SUGGESTIONS: Option 1 | Option 2 | Option 3] with 2-4 relevant options for what the user wants next!"
     })
         
     completion = _groq_call_with_fallback(client, messages, temperature=0.75, max_tokens=300)
-    text = completion.choices[0].message.content.strip()
+    raw_text = completion.choices[0].message.content.strip()
+    text, suggestions = _extract_suggestions_from_text(raw_text)
     
     if "[GENERATE_PLAN]" in text:
         clean_text = text.replace("[GENERATE_PLAN]", "").strip()
@@ -770,7 +828,7 @@ def _generate_groq_chat(chat_history: List[Dict[str, str]], mode: str = "fitness
             
         try:
             plan = _generate_groq_dynamic_plan_from_chat(chat_history, mode)
-            return {"text": clean_text, "plan_data": plan}
+            return {"text": clean_text, "plan_data": plan, "suggestions": suggestions}
         except Exception as e:
             print(f"Error dynamically generating Groq plan: {e}")
             all_user_text = " ".join([m["content"] for m in chat_history if m["role"] == "user"])
@@ -778,14 +836,14 @@ def _generate_groq_chat(chat_history: List[Dict[str, str]], mode: str = "fitness
             eligible = get_eligible_exercises(user_equipment=detected_equip)
             if mode == 'nutrition':
                 plan = _generate_mock_meal_plan(None)
-                return {"text": clean_text, "plan_data": plan}
+                return {"text": clean_text, "plan_data": plan, "suggestions": suggestions}
             else:
                 if not eligible:
                     eligible = [e for e in EXERCISE_CATALOG if not e.get("required_equipment")]
                 plan = _generate_mock_plan(None, eligible)
-                return {"text": clean_text, "plan_data": plan}
+                return {"text": clean_text, "plan_data": plan, "suggestions": suggestions}
         
-    return {"text": text}
+    return {"text": text, "suggestions": suggestions}
 
 def _generate_gemini_chat(chat_history: List[Dict[str, str]], mode: str = "fitness") -> Dict[str, Any]:
     model = get_gemini_model()
@@ -806,11 +864,12 @@ def _generate_gemini_chat(chat_history: List[Dict[str, str]], mode: str = "fitne
     
     {_get_voice_rules_for_mode(mode)}
     
-    CRITICAL REMINDER: If the user just asked you to create, modify, update, or change a plan, you MUST append the exact string [GENERATE_PLAN] at the very end of your response. Do not forget this!
+    CRITICAL REMINDER: If the user just asked you to create, modify, update, or change a plan, you MUST append the exact string [GENERATE_PLAN] at the very end of your response. Also append [SUGGESTIONS: Option 1 | Option 2 | Option 3] with 2-4 relevant options for what the user wants next!
     """
     
     response = model.generate_content(prompt)
-    text = response.text.strip()
+    raw_text = response.text.strip()
+    text, suggestions = _extract_suggestions_from_text(raw_text)
     
     if "[GENERATE_PLAN]" in text:
         clean_text = text.replace("[GENERATE_PLAN]", "").strip()
@@ -822,7 +881,7 @@ def _generate_gemini_chat(chat_history: List[Dict[str, str]], mode: str = "fitne
             
         try:
             plan = _generate_gemini_dynamic_plan_from_chat(chat_history, mode)
-            return {"text": clean_text, "plan_data": plan}
+            return {"text": clean_text, "plan_data": plan, "suggestions": suggestions}
         except Exception as e:
             print(f"Error dynamically generating Gemini plan: {e}")
             all_user_text = " ".join([m["content"] for m in chat_history if m["role"] == "user"])
@@ -830,14 +889,14 @@ def _generate_gemini_chat(chat_history: List[Dict[str, str]], mode: str = "fitne
             eligible = get_eligible_exercises(user_equipment=detected_equip)
             if mode == 'nutrition':
                 plan = _generate_mock_meal_plan(None)
-                return {"text": clean_text, "plan_data": plan}
+                return {"text": clean_text, "plan_data": plan, "suggestions": suggestions}
             else:
                 if not eligible:
                     eligible = [e for e in EXERCISE_CATALOG if not e.get("required_equipment")]
                 plan = _generate_mock_plan(None, eligible)
-                return {"text": clean_text, "plan_data": plan}
+                return {"text": clean_text, "plan_data": plan, "suggestions": suggestions}
         
-    return {"text": text}
+    return {"text": text, "suggestions": suggestions}
 
 def generate_conversational_response(chat_history: List[Dict[str, str]], mode: str = "fitness") -> Dict[str, Any]:
     provider = get_ai_provider()

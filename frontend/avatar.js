@@ -19,7 +19,7 @@ try {
     const fur = mat('#704237'), muzzle = mat('#a37157'), dark = mat('#2a2420'), shirt = mat('#394743'), trim = mat('#26332e'), horn = mat('#d7c3a0'), white = mat('#fff7e7', .3), iris = mat('#8e582d', .3), black = mat('#151311', .2), inner = mat('#b57e6b');
     const sphere = new THREE.SphereGeometry(1, 32, 24);
     function ell(parent, material, pos, scale, tag = 'body') { const m = new THREE.Mesh(sphere, material); m.position.set(...pos); m.scale.set(...scale); m.castShadow = true; m.receiveShadow = true; m.userData.part = tag; parent.add(m); return m; }
-    
+
     const bull = new THREE.Group(); scene.add(bull);
     const torso = new THREE.Group(); bull.add(torso);
     ell(torso, shirt, [0, 1.95, 0], [.87, .92, .48]);
@@ -29,7 +29,7 @@ try {
     const head = new THREE.Group(); head.position.set(0, 3.13, .05); torso.add(head);
     ell(head, fur, [0, 0, 0], [.64, .69, .5], 'head'); ell(head, fur, [0, .33, -.03], [.59, .39, .44], 'head');
     ell(head, muzzle, [0, -.3, .43], [.53, .3, .34], 'head');
-    
+
     for (const s of [-1, 1]) {
         const ear = ell(head, fur, [s * .72, .12, -.04], [.35, .16, .16], 'head'); ear.rotation.z = s * .18;
         const e = ell(head, inner, [s * .75, .14, .08], [.24, .085, .035], 'head'); e.rotation.z = s * .18;
@@ -81,7 +81,7 @@ try {
         dumbbell(elbow, s);
     }
     const floor = new THREE.Mesh(new THREE.CircleGeometry(3, 64), new THREE.ShadowMaterial({ opacity: .13 })); floor.rotation.x = -Math.PI / 2; floor.position.y = .005; floor.receiveShadow = true; scene.add(floor);
-    
+
     const ideaBulb = new THREE.Group(); ideaBulb.position.set(0, 4.25, .12); ideaBulb.visible = false; bull.add(ideaBulb);
     const bulbGlass = new THREE.MeshStandardMaterial({ color: '#ffe68a', emissive: '#ffc329', emissiveIntensity: 1.4, roughness: .28 });
     const bulbRay = new THREE.MeshBasicMaterial({ color: '#ffc342' });
@@ -107,44 +107,44 @@ try {
 
     const randomActions = ['workout', 'press', 'flex', 'wave', 'jump', 'think'];
 
-    function react(type) { 
+    function react(type) {
         if (type === 'random') {
-            const choices = currentMode === 'nutrition' 
-                ? ['cook', 'slice', 'think', 'celebrate'] 
+            const choices = currentMode === 'nutrition'
+                ? ['cook', 'slice', 'think', 'celebrate']
                 : randomActions;
             const validChoices = choices.filter(a => a !== action);
             type = validChoices[Math.floor(Math.random() * validChoices.length)];
         }
-        
-        if (type === 'workout' && action === 'workout') type = 'reset'; 
+
+        if (type === 'workout' && action === 'workout') type = 'reset';
         if (type === 'press' && action === 'press') type = 'reset';
-        action = type === 'reset' ? 'idle' : type; 
-        started = clock.getElapsedTime(); 
-        
+        action = type === 'reset' ? 'idle' : type;
+        started = clock.getElapsedTime();
+
         // Let rhino handle its own reactions if it's active
         if (currentMode === 'nutrition') {
             rhino.react(action, started);
-        } 
-        
+        }
+
         ideaBulb.visible = action === 'think';
-        const working = action === 'workout' || action === 'press'; 
-        dumbbells.forEach(d => d.visible = working); 
-        
-        if (type === 'reset') { lookX = 0; lookY = 0; } 
-        
+        const working = action === 'workout' || action === 'press';
+        dumbbells.forEach(d => d.visible = working);
+
+        if (type === 'reset') { lookX = 0; lookY = 0; }
+
         // Let app.js know if we just randomly started something so it resets idle timer
         if (window.onAvatarAction) {
             window.onAvatarAction(action);
         }
     }
-    
+
     let talkPulse = 0;
     let talkingMode = null;
     function wordPulse(mode) {
         talkPulse = 1.0;
         talkingMode = mode;
     }
-    
+
     let currentMode = document.body.classList.contains('mealbuddy-page') ? 'nutrition' : 'fitness';
     const rhino = createRhino(THREE, scene);
 
@@ -158,10 +158,10 @@ try {
             rhino.chef.visible = false;
         }
     }
-    
+
     // Apply initial visibility based on page class
     setMode(currentMode);
-    
+
     // Give rhino a chance to randomly do something when idle
     setInterval(() => {
         if (currentMode === 'nutrition' && action === 'idle' && Math.random() < 0.3) {
@@ -169,42 +169,40 @@ try {
             react(actions[Math.floor(Math.random() * actions.length)]);
         }
     }, 4000);
-    
+
     window.bullAvatar = { react, wordPulse, setMode };
-    
+
     function coordinates(e) { const r = canvas.getBoundingClientRect(); pointer.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); }
     canvas.addEventListener('pointermove', e => { coordinates(e); lookX = pointer.x * .3; lookY = -pointer.y * .13; });
-    
+
     canvas.addEventListener('pointerleave', () => { lookX = 0; lookY = 0; });
     let down = null; canvas.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY }; }); canvas.addEventListener('pointercancel', () => down = null);
     canvas.addEventListener('pointerup', e => { if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 12) { down = null; return; } down = null; coordinates(e); ray.setFromCamera(pointer, camera); const hit = ray.intersectObject(currentMode === 'fitness' ? bull : rhino.chef, true)[0]; if (hit) react('random'); });
-    
-    const observer = new ResizeObserver(() => { 
-        const w = stage.clientWidth, h = stage.clientHeight; 
-        renderer.setSize(w, h); 
-        camera.aspect = w / h; 
+
+    const observer = new ResizeObserver(() => {
+        const w = stage.clientWidth, h = stage.clientHeight;
+        renderer.setSize(w, h);
+        camera.aspect = w / h;
         const halfFov = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-        
+
         // Zoom more by reducing the distance required to fit the model
         camera.position.z = Math.max(1.9 / halfFov, 1.5 / (camera.aspect * halfFov)) + 0.3;
-        
-        // Shift camera left on desktop so the model appears in the right box
-        let shiftX = 0;
-        let lookX = 0;
+
+        // Camera placement: desktop shifts left for side chat/plan; mobile frames avatar cleanly
         if (w > 768) {
-            shiftX = -1.4; // Shift camera left
-            lookX = -1.4;  // Look straight ahead from the shifted position
+            camera.position.x = -1.4;
+            camera.position.y = 2.95;
+            camera.lookAt(-1.4, 2.53, 0);
+        } else {
+            camera.position.x = 0;
+            camera.position.y = 2.62;
+            camera.lookAt(0, 2.32, 0);
         }
-        camera.position.x = shiftX;
-        
-        // Move camera up (to push the character down in the frame)
-        camera.position.y = 2.95; 
-        camera.lookAt(lookX, 2.53, 0); 
-        
-        camera.updateProjectionMatrix(); 
-    }); 
+
+        camera.updateProjectionMatrix();
+    });
     observer.observe(stage);
-    
+
     renderer.setAnimationLoop(() => {
         const t = clock.getElapsedTime(), elapsed = t - started, motion = reduced.matches ? 0 : 1;
         talkPulse = Math.max(0, talkPulse - 0.06);
@@ -223,7 +221,7 @@ try {
         const duration = action === 'think' ? 4 : (action === 'workout' || action === 'press') ? 8.8 : 2.2;
 
         if (elapsed > duration && action !== 'idle' && action !== 'talk') action = 'idle';
-        
+
         let envelope = 0;
         if (action === 'talk') {
             envelope = 1;
@@ -234,11 +232,11 @@ try {
         bull.position.y = motion * Math.sin(t * 2) * .025; bull.rotation.y = motion * Math.sin(t * .6) * .045;
         torso.scale.set(1, 1 + motion * Math.sin(t * 2) * .009, 1);
         head.rotation.y += (lookX * motion - head.rotation.y) * .09; head.rotation.x += (lookY * motion - head.rotation.x) * .09;
-        arms.forEach(a => { a.rotation.z = 0; a.rotation.x = 0; a.position.y = 2.48; a.position.z = 0; }); 
-        dumbbells.forEach(d => d.rotation.z = 0); 
-        elbows.forEach(e => e.rotation.set(0, 0, 0)); 
+        arms.forEach(a => { a.rotation.z = 0; a.rotation.x = 0; a.position.y = 2.48; a.position.z = 0; });
+        dumbbells.forEach(d => d.rotation.z = 0);
+        elbows.forEach(e => e.rotation.set(0, 0, 0));
         head.rotation.z = 0;
-        
+
         if (action === 'workout') {
             const equip = THREE.MathUtils.smoothstep(elapsed, 0, .4);
             const phase = Math.max(0, elapsed - .4) / 2.8 * Math.PI * 2;
@@ -279,7 +277,7 @@ try {
         if (action === 'wave') { arms[1].rotation.z = envelope * (.22 + Math.sin(elapsed * 15) * .2) * motion; arms[1].rotation.x = -envelope * .45 * motion; head.rotation.z = -envelope * .1 * motion; }
         if (action === 'jump') bull.position.y += Math.abs(Math.sin(elapsed * Math.PI * 2)) * envelope * .4 * motion;
         if (action === 'nod') head.rotation.x += Math.sin(elapsed * 10) * envelope * .04 * motion;
-        
+
         const isSpeaking = (action === 'talk' && talkPulse > 0.02 && talkingMode === 'fitness');
         mouthOpening.visible = isSpeaking;
         teeth.visible = isSpeaking;
@@ -288,12 +286,12 @@ try {
         if (action === 'talk') {
             arms[0].rotation.x = -0.05 + Math.sin(t * 5) * 0.05 * motion;
             arms[1].rotation.x = -0.05 + Math.cos(t * 4) * 0.05 * motion;
-            
+
             if (isSpeaking) {
                 mouthOpening.scale.y = mouthOpeningOriginalScaleY * (1 + talkPulse * 0.2);
                 lip.position.y = -(talkPulse * 0.01);
                 mouthInner.position.y = -.495 - (talkPulse * 0.005);
-                teeth.position.y = -.405; 
+                teeth.position.y = -.405;
             } else {
                 mouthOpening.scale.y = mouthOpeningOriginalScaleY;
                 lip.position.y = 0;
@@ -309,6 +307,6 @@ try {
 
         renderer.render(scene, camera);
     });
-} catch (error) { 
-    console.error(error); 
+} catch (error) {
+    console.error(error);
 }

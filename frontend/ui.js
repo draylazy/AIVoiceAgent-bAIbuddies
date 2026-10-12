@@ -66,15 +66,18 @@
     const btnSend = document.getElementById('btn-send');
     const btnMic = document.getElementById('btn-mic');
 
-    pillRow.querySelectorAll('.pill[data-prompt]').forEach(pill => {
-        pill.addEventListener('click', () => {
-            if (chatInput.disabled || btnSend.classList.contains('btn-stop')) return;
-            chatInput.value = pill.dataset.prompt;
-            btnSend.click();
+    if (pillRow) {
+        pillRow.querySelectorAll('.pill[data-prompt]').forEach(pill => {
+            pill.addEventListener('click', () => {
+                if (chatInput.disabled || btnSend.classList.contains('btn-stop')) return;
+                chatInput.value = pill.dataset.prompt;
+                document.querySelector('.dashboard-grid')?.classList.add('has-conversation');
+                btnSend.click();
+            });
         });
-    });
+    }
 
-    document.getElementById('pill-talk').addEventListener('click', () => btnMic.click());
+    document.getElementById('pill-talk')?.addEventListener('click', () => btnMic?.click());
 
     /* ---------- Mouse-driven character motion (scrub-style, SENSITIVITY 0.8) ---------- */
     const parallax = document.getElementById('hero-parallax');
@@ -83,6 +86,7 @@
     let prevX = null, target = 0, current = 0, rafId = null;
 
     function tick() {
+        if (!parallax) return;
         current += (target - current) * 0.08;
         parallax.style.transform =
             `translate3d(${(-current * MAX_SHIFT).toFixed(2)}px, 0, 0) ` +
@@ -90,47 +94,52 @@
         rafId = Math.abs(target - current) > 0.0005 ? requestAnimationFrame(tick) : null;
     }
 
-    window.addEventListener('mousemove', e => {
-        if (reducedMotion.matches) return;
-        if (prevX === null) { prevX = e.clientX; return; }
-        const delta = e.clientX - prevX;
-        prevX = e.clientX;
-        target = Math.max(-1, Math.min(1, target + (delta / window.innerWidth) * SENSITIVITY * 2));
-        if (!rafId) rafId = requestAnimationFrame(tick);
-    }, { passive: true });
+    if (parallax) {
+        window.addEventListener('mousemove', e => {
+            if (reducedMotion.matches) return;
+            if (prevX === null) { prevX = e.clientX; return; }
+            const delta = e.clientX - prevX;
+            prevX = e.clientX;
+            target = Math.max(-1, Math.min(1, target + (delta / window.innerWidth) * SENSITIVITY * 2));
+            if (!rafId) rafId = requestAnimationFrame(tick);
+        }, { passive: true });
+    }
 
     /* ---------- Poke the character ---------- */
-    const heroStage = document.getElementById('hero-stage');
+    const heroStage = document.getElementById('hero-stage') || document.getElementById('stage');
     const heroAnim = document.getElementById('hero-anim');
-    heroStage.addEventListener('click', () => {
-        heroAnim.classList.remove('poke');
-        void heroAnim.offsetWidth; // restart animation
-        heroAnim.classList.add('poke');
-        const coachArea = document.getElementById('coach-area');
-        if (window.bullAvatar && coachArea.classList.contains('state-idle')) {
-            window.bullAvatar.react('random');
-        }
-    });
-    heroAnim.addEventListener('animationend', e => {
-        if (e.animationName === 'heroPoke') heroAnim.classList.remove('poke');
-    });
+    if (heroStage && heroAnim) {
+        heroStage.addEventListener('click', () => {
+            heroAnim.classList.remove('poke');
+            void heroAnim.offsetWidth; // restart animation
+            heroAnim.classList.add('poke');
+            const coachArea = document.getElementById('coach-area');
+            if (window.bullAvatar && coachArea.classList.contains('state-idle')) {
+                window.bullAvatar.react('random');
+            }
+        });
+        heroAnim.addEventListener('animationend', e => {
+            if (e.animationName === 'heroPoke') heroAnim.classList.remove('poke');
+        });
+    }
 
     /* ---------- Mobile hamburger menu ---------- */
     const burger = document.getElementById('nav-burger');
     const menu = document.getElementById('mobile-menu');
 
     function setMenu(open) {
+        if (!burger || !menu) return;
         burger.classList.toggle('open', open);
         menu.classList.toggle('open', open);
         burger.setAttribute('aria-expanded', String(open));
         burger.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
     }
 
-    burger.addEventListener('click', () => setMenu(!menu.classList.contains('open')));
-    menu.querySelectorAll('a').forEach(a => a.addEventListener('click', () => setMenu(false)));
-    document.getElementById('mobile-menu-plan').addEventListener('click', () => {
+    burger?.addEventListener('click', () => setMenu(!menu?.classList.contains('open')));
+    menu?.querySelectorAll('a').forEach(a => a.addEventListener('click', () => setMenu(false)));
+    document.getElementById('mobile-menu-plan')?.addEventListener('click', () => {
         setMenu(false);
-        document.getElementById('btn-open-plan').click();
+        document.getElementById('btn-open-plan')?.click();
     });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') setMenu(false); });
     window.matchMedia('(min-width: 768px)').addEventListener('change', e => { if (e.matches) setMenu(false); });

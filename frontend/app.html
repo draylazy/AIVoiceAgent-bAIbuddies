@@ -17,7 +17,7 @@
         href="https://db.onlinewebfonts.com/c/5ac3fe7c6abd2f62067f266d89671492?family=HelveticaNowDisplay-Medium">
     <link rel="stylesheet"
         href="https://db.onlinewebfonts.com/c/1aa3377e489837a26d019bba501e779d?family=HelveticaNowDisplayW01-Rg">
-    <link rel="stylesheet" href="style.css?v=30">
+    <link rel="stylesheet" href="style.css?v=39">
 </head>
 
 <body>
@@ -44,7 +44,7 @@
         </a>
 
         <nav class="nav-bar" aria-label="Coach mode">
-            <a href="#" class="active" id="nav-workout">Workout</a><span class="nav-sep">, </span><a
+            <a href="#workout" class="active" id="nav-workout">Workout</a><span class="nav-sep">, </span><a
                 href="#nutrition" id="nav-nutrition">Nutrition</a>
         </nav>
 
@@ -76,9 +76,10 @@
 
     <!-- Mobile overlay menu (reuses .mobile-only-switch so app.js SPA switching keeps working) -->
     <div class="mobile-only-switch mobile-menu" id="mobile-menu">
-        <a href="app.html" class="active" id="mobile-nav-workout">Workout</a>
-        <a href="mealbuddy.html" id="mobile-nav-nutrition">Nutrition</a>
+        <a href="#workout" class="active" id="mobile-nav-workout">Workout</a>
+        <a href="#nutrition" id="mobile-nav-nutrition">Nutrition</a>
         <button type="button" class="mobile-menu-cta" id="mobile-menu-plan">View your plan</button>
+        <button type="button" class="mobile-menu-reset" id="mobile-menu-reset">Start over / New chat</button>
     </div>
 
     <main class="container">
@@ -90,16 +91,40 @@
             <section class="hero-intro" aria-labelledby="hero-title">
                 <h1 class="sr-only" id="hero-title">FitBuddy – AI voice fitness and nutrition coach</h1>
 
-                <p class="intro-blur" aria-hidden="true">
-                    <span class="only-fit">Hey there, meet FitBuddy,<br>your Equipment-Aware AI Voice Coach</span>
-                    <span class="only-meal">Hey there, meet MealBuddy,<br>your Calorie-Aware AI Nutrition Chef</span>
-                </p>
+                <!-- Initial static intro (visible before conversation) -->
+                <div class="hero-initial-intro" id="hero-initial-intro">
+                    <p class="intro-blur" aria-hidden="true">
+                        <span class="only-fit">Hey there, meet FitBuddy,<br>your Equipment-Aware AI Voice Coach</span>
+                        <span class="only-meal">Hey there, meet MealBuddy,<br>your Calorie-Aware AI Nutrition Chef</span>
+                    </p>
 
-                <p class="typewriter" id="typewriter"><span id="typewriter-text"></span><span class="tw-cursor"
-                        aria-hidden="true"></span></p>
+                    <p class="typewriter" id="typewriter"><span id="typewriter-text"></span><span class="tw-cursor"
+                            aria-hidden="true"></span></p>
+                </div>
+
+                <!-- Active live dialogue (phone view live transcript & coach response HUD) -->
+                <div class="hero-active-dialogue" id="hero-active-dialogue" style="display: none;">
+                    <!-- User transcribe row -->
+                    <div class="dialogue-card user-card" id="dialogue-user-card" style="display: none;">
+                        <div class="dialogue-speaker-tag is-user" id="user-speaker-tag">
+                            <span class="speaker-dot"></span>
+                            <span class="speaker-name">You</span>
+                        </div>
+                        <p class="dialogue-text user-text" id="user-dialogue-text"></p>
+                    </div>
+
+                    <!-- Coach response row -->
+                    <div class="dialogue-card coach-card" id="dialogue-coach-card" style="display: none;">
+                        <div class="dialogue-speaker-tag is-coach" id="coach-speaker-tag">
+                            <span class="speaker-dot"></span>
+                            <span class="speaker-name" id="coach-speaker-name">FitBuddy</span>
+                        </div>
+                        <p class="dialogue-text coach-text" id="coach-dialogue-text"></p>
+                    </div>
+                </div>
 
                 <div class="pill-row" id="pill-row">
-                    <div class="pill-group only-fit">
+                    <div class="pill-group only-fit" id="pill-group-fit">
                         <button type="button" class="pill" id="pill-fit-1"
                             data-prompt="Build me a full-body home workout">Build me a home workout</button>
                         <button type="button" class="pill" id="pill-fit-2"
@@ -109,7 +134,7 @@
                         <button type="button" class="pill" id="pill-fit-4"
                             data-prompt="Plan a 3-day split for building muscle">Plan a 3-day split</button>
                     </div>
-                    <div class="pill-group only-meal">
+                    <div class="pill-group only-meal" id="pill-group-meal">
                         <button type="button" class="pill" id="pill-meal-1"
                             data-prompt="Plan a high-protein day of eating">Plan a high-protein day</button>
                         <button type="button" class="pill" id="pill-meal-2"
@@ -119,6 +144,8 @@
                         <button type="button" class="pill" id="pill-meal-4"
                             data-prompt="Create a meal prep plan for the week">Meal prep for the week</button>
                     </div>
+                    <!-- Dynamic suggestion pills container for phone view -->
+                    <div class="dynamic-pills-group" id="dynamic-pills-group" style="display: none;"></div>
                     <button type="button" class="pill pill-outline" id="pill-talk">
                         <span>Prefer talking? <u>Tap to speak</u></span>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -141,7 +168,13 @@
                     </svg>
                 </button>
                 <div class="chat-head">
-                    <span class="chat-head-label">Conversation</span>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="chat-head-label">Conversation</span>
+                        <button type="button" id="btn-reset-chat" class="chat-reset-btn" title="Start a fresh conversation" aria-label="Start fresh">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                            <span>New</span>
+                        </button>
+                    </div>
                     <span id="chat-live-indicator" class="live-indicator"><span class="dot"></span> Live coach</span>
                 </div>
                 <div id="chat-history" class="chat-history"></div>
@@ -225,9 +258,9 @@
         </div>
     </main>
 
-    <script type="module" src="avatar.js?v=22"></script>
-    <script src="app.js?v=7"></script>
-    <script src="ui.js?v=1"></script>
+    <script type="module" src="avatar.js?v=23"></script>
+    <script src="app.js?v=16"></script>
+    <script src="ui.js?v=4"></script>
 </body>
 
 </html>
