@@ -120,7 +120,8 @@ def chat(request: schemas.ChatRequest, db: Session = Depends(get_db)):
     return schemas.ChatResponse(
         response=response_text,
         audio_url=audio_url,
-        plan_data=response_data.get("plan_data")
+        plan_data=response_data.get("plan_data"),
+        suggestions=response_data.get("suggestions")
     )
 
 @app.get("/tts")

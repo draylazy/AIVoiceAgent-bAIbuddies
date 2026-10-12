@@ -92,3 +92,4 @@ class ChatResponse(BaseModel):
     response: str
     audio_url: Optional[str] = None
     plan_data: Optional[Union[WorkoutPlanData, MealPlanData]] = None
+    suggestions: Optional[List[str]] = None

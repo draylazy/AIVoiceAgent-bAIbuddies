@@ -1,11 +1,8 @@
 const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:8000'
     : window.location.origin;
-let sessions = {
-    fitness: "fit_" + Math.floor(Math.random() * 10000),
-    nutrition: "nutri_" + Math.floor(Math.random() * 10000)
-};
-let chatData = {
+
+const DEFAULT_CHAT_DATA = {
     fitness: [
         { role: "coach", text: "Hi there! I'm FitBuddy. Tell me what equipment you have and your fitness goals, and I'll create a plan for you!" },
         { role: "coach", text: "💡 Hint: Try asking for modifications, a harder version, or a plan for a specific goal." }
@@ -15,10 +12,59 @@ let chatData = {
         { role: "coach", text: "💡 Hint: Try asking for recipe ideas, macro adjustments, or a meal plan for a specific goal." }
     ]
 };
+
+let sessions = {
+    fitness: "fit_" + Math.floor(Math.random() * 10000),
+    nutrition: "nutri_" + Math.floor(Math.random() * 10000)
+};
+
+let chatData = JSON.parse(JSON.stringify(DEFAULT_CHAT_DATA));
+
 let planDataStore = {
     fitness: null,
     nutrition: null
 };
+
+// Safe localStorage persistence (fail-safe wrapped in try/catch)
+function loadStoredState() {
+    try {
+        const storedSessions = localStorage.getItem('fitbuddy_sessions');
+        if (storedSessions) {
+            const parsed = JSON.parse(storedSessions);
+            if (parsed && typeof parsed === 'object') sessions = parsed;
+        }
+
+        const storedChat = localStorage.getItem('fitbuddy_chat_data');
+        if (storedChat) {
+            const parsedChat = JSON.parse(storedChat);
+            if (parsedChat && Array.isArray(parsedChat.fitness) && Array.isArray(parsedChat.nutrition)) {
+                chatData = parsedChat;
+            }
+        }
+
+        const storedPlans = localStorage.getItem('fitbuddy_plan_data');
+        if (storedPlans) {
+            const parsedPlans = JSON.parse(storedPlans);
+            if (parsedPlans && typeof parsedPlans === 'object') {
+                planDataStore = parsedPlans;
+            }
+        }
+    } catch (e) {
+        console.warn("Could not load from localStorage:", e);
+    }
+}
+
+function saveStoredState() {
+    try {
+        localStorage.setItem('fitbuddy_sessions', JSON.stringify(sessions));
+        localStorage.setItem('fitbuddy_chat_data', JSON.stringify(chatData));
+        localStorage.setItem('fitbuddy_plan_data', JSON.stringify(planDataStore));
+    } catch (e) {
+        console.warn("Could not save to localStorage:", e);
+    }
+}
+
+loadStoredState();
 // Speech APIs
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const synthesis = window.speechSynthesis;
@@ -78,6 +124,8 @@ if (SpeechRecognition) {
         chatInput.value = "";
         btnSend.disabled = true;
         chatInput.disabled = true;
+        document.querySelector('.dashboard-grid')?.classList.add('has-conversation');
+        updateMobileHUD("user", "Listening...", true);
 
         // Create temporary message bubble
         tempUserMsgWrapper = document.createElement("div");
@@ -107,6 +155,7 @@ if (SpeechRecognition) {
 
         // Get both finalized text and currently spoken text
         let fullText = (finalTranscript + interimTranscript).trim();
+        updateMobileHUD("user", fullText ? (fullText + "...") : "Listening...", true);
         if (tempUserMsgBubble) {
             tempUserMsgBubble.textContent = fullText + "...";
             tempUserMsgBubble.dataset.fullText = fullText;
@@ -154,6 +203,8 @@ if (SpeechRecognition) {
         let spokenText = "";
         if (tempUserMsgBubble && tempUserMsgBubble.dataset.fullText) {
             spokenText = tempUserMsgBubble.dataset.fullText;
+        } else if (finalTranscript) {
+            spokenText = finalTranscript.trim();
         }
 
         if (tempUserMsgWrapper) {
@@ -163,6 +214,7 @@ if (SpeechRecognition) {
         }
 
         if (spokenText.trim() !== "") {
+            updateMobileHUD("user", spokenText, false);
             chatInput.value = spokenText;
             setAvatarState("idle");
             coachStatus.textContent = "Sending...";
@@ -233,17 +285,237 @@ function resetChatControls() {
     }
 }
 
-function addChatMessage(role, text, isLoad = false, modeOverride = null) {
+function extractChoicesFromText(text) {
+    if (!text) return null;
+    const match = text.match(/(?:such as|like|prefer|choose|between|either)\s+([^.?!]+\?)/i) || 
+                  text.match(/([A-Za-z0-9\s/-]+(?:,\s*[A-Za-z0-9\s/-]+)*\s+or\s+[A-Za-z0-9\s/-]+\?)/i);
+    if (match) {
+        let raw = match[1].replace(/\?$/, '').trim();
+        raw = raw.replace(/^(either|both|between|any)\s+/i, '');
+        const items = raw.split(/,\s*or\s+|,\s*|\s+or\s+/i)
+            .map(s => s.trim().replace(/^(a|an|the)\s+/i, ''))
+            .filter(s => s.length >= 2 && s.length <= 32 && !/^(which|what|how|why|when|who)\b/i.test(s));
+        if (items.length >= 2 && items.length <= 4) {
+            return items.map(item => item.charAt(0).toUpperCase() + item.slice(1));
+        }
+    }
+    return null;
+}
+
+function getSuggestionsForCoachMessage(text, mode, lastUserPrompt = "") {
+    if (!text) return [];
+    const lower = text.toLowerCase();
+
+    // 1. Direct user intent matching — suggestions must directly answer what the user asked/wants
+    if (lastUserPrompt) {
+        const uLower = lastUserPrompt.toLowerCase();
+        if (uLower.includes('harder') || uLower.includes('intensity') || uLower.includes('difficult') || uLower.includes('challenge') || uLower.includes('too easy')) {
+            return ["Increase volume & sets", "Shorter rest periods", "Supersets & drop sets", "Heavier weight"];
+        }
+        if (uLower.includes('swap') || uLower.includes('replace') || uLower.includes('substitute') || uLower.includes('different exercise')) {
+            return ["Swap for dumbbells", "Bodyweight alternative", "Low impact variation", "Focus on arms"];
+        }
+        if (uLower.includes('rest day') || uLower.includes('recovery')) {
+            return ["Active rest & walking", "Complete rest day", "Mobility & stretching"];
+        }
+        if (uLower.includes('dumbbell') || uLower.includes('home') || uLower.includes('equipment') || uLower.includes('gear')) {
+            return ["Full-body workout", "Chest & Triceps", "Back & Biceps", "Leg day"];
+        }
+        if (uLower.includes('split') || uLower.includes('schedule') || (uLower.includes('day') && (uLower.includes('3') || uLower.includes('4') || uLower.includes('5')))) {
+            return ["Push Pull Legs (PPL)", "Upper / Lower split", "3-Day Full Body", "Bro split"];
+        }
+        if (uLower.includes('cardio') || uLower.includes('fat') || uLower.includes('lose weight')) {
+            return ["HIIT workout", "Steady state cardio", "Caloric deficit guide", "Daily 10k steps"];
+        }
+        if (mode === 'nutrition') {
+            if (uLower.includes('protein') || uLower.includes('muscle')) {
+                return ["High protein meals", "Protein shake recipe", "Macro breakdown", "Quick prep snacks"];
+            }
+            if (uLower.includes('diet') || uLower.includes('meal') || uLower.includes('eat') || uLower.includes('food')) {
+                return ["Higher protein options", "Quick 15-min prep", "Under 500 calories", "Healthy snack ideas"];
+            }
+        }
+    }
+
+    // 2. Dynamic choice extraction from the coach question (e.g., "A, B, or C?")
+    const dynamicChoices = extractChoicesFromText(text);
+    if (dynamicChoices && dynamicChoices.length >= 2) {
+        return dynamicChoices;
+    }
+
+    // 3. Experience level question
+    if (lower.includes('beginner') && (lower.includes('intermediate') || lower.includes('professional') || lower.includes('advanced'))) {
+        return ["Beginner", "Intermediate", "Professional"];
+    }
+
+    // 4. Rest days question (active vs complete rest)
+    if (lower.includes('active rest') || lower.includes('complete rest')) {
+        return ["Active rest", "Complete rest", "No rest days"];
+    }
+
+    // 5. Equipment question
+    if (lower.includes('what equipment') || lower.includes('what gear') || lower.includes('what do you have') || lower.includes('gear do you have')) {
+        if (mode === 'nutrition') {
+            return ["Basic kitchen gear", "Air fryer & blender", "Full meal prep kitchen"];
+        }
+        return ["Dumbbells only", "Full gym equipment", "Bodyweight / no equipment", "Resistance bands & mat"];
+    }
+
+    // 6. Days split question
+    if (lower.includes('how many days') || (lower.includes('split') && (lower.includes('day') || lower.includes('schedule')))) {
+        return ["3 days a week", "4 days a week", "5 days a week"];
+    }
+
+    // 7. Goals question
+    if (lower.includes('what are your goals') || lower.includes('fitness goals') || lower.includes('what are we training') || lower.includes('what are we eating today')) {
+        if (mode === 'nutrition') {
+            return ["Build muscle / high protein", "Fat loss & deficit", "Quick meal prep", "Clean eating"];
+        }
+        return ["Build muscle", "Lose body fat", "Increase strength", "Cardio & stamina"];
+    }
+
+    // 8. Plan was just generated or modified
+    if (lower.includes('here is your plan') || lower.includes('plan for you') || lower.includes('created a plan') || lower.includes('routine') || lower.includes('click the "your workout"')) {
+        if (mode === 'nutrition') {
+            return ["Higher protein options", "Make it easier to prep", "Adjust my calories", "Add healthy snacks"];
+        }
+        return ["Make it harder", "Swap an exercise", "Add a 4th day", "Include warmups"];
+    }
+
+    // 9. Diet / food preferences (nutrition mode)
+    if (mode === 'nutrition') {
+        if (lower.includes('breakfast') || lower.includes('morning')) {
+            return ["High protein breakfast", "Quick 5-min idea", "Smoothie recipe"];
+        }
+        if (lower.includes('dinner') || lower.includes('lunch')) {
+            return ["High protein dinner", "Quick prep meal", "Low carb options"];
+        }
+        if (lower.includes('dietary') || lower.includes('allergies') || lower.includes('vegetarian')) {
+            return ["Vegetarian", "High protein", "Low carb", "No dairy"];
+        }
+        return ["Make a full meal plan", "High protein snack ideas", "How many calories?", "Quick dinner recipe"];
+    }
+
+    // 10. Form tips / exercise cues
+    if (lower.includes('form') || lower.includes('technique') || lower.includes('cue') || lower.includes('bench') || lower.includes('squat')) {
+        return ["Give me another exercise", "How many sets & reps?", "Make it harder"];
+    }
+
+    // 11. Initial greeting / hints (do not duplicate pills in chat since they are already above)
+    if (lower.includes("hi there") || lower.includes("hint:") || lower.includes("i'm fitbuddy") || lower.includes("i'm mealbuddy")) {
+        return [];
+    }
+
+    // Default fallback
+    return ["Make it harder", "Swap an exercise", "Plan a 3-day split", "Focus on arms"];
+}
+
+function resetMobileHUD(mode) {
+    const heroInitialIntro = document.getElementById("hero-initial-intro");
+    const heroActiveDialogue = document.getElementById("hero-active-dialogue");
+    const userCard = document.getElementById("dialogue-user-card");
+    const coachCard = document.getElementById("dialogue-coach-card");
+    const dynamicPillsGroup = document.getElementById("dynamic-pills-group");
+    const pillGroupFit = document.getElementById("pill-group-fit");
+    const pillGroupMeal = document.getElementById("pill-group-meal");
+
+    if (heroInitialIntro) heroInitialIntro.style.display = 'block';
+    if (heroActiveDialogue) heroActiveDialogue.style.display = 'none';
+    if (userCard) userCard.style.display = 'none';
+    if (coachCard) coachCard.style.display = 'none';
+    if (dynamicPillsGroup) {
+        dynamicPillsGroup.style.display = 'none';
+        dynamicPillsGroup.innerHTML = '';
+    }
+    if (pillGroupFit) pillGroupFit.style.display = (mode === 'nutrition') ? 'none' : 'contents';
+    if (pillGroupMeal) pillGroupMeal.style.display = (mode === 'nutrition') ? 'contents' : 'none';
+}
+
+function updateMobileHUD(speaker, text, isInterim = false, suggestions = null) {
+    const heroInitialIntro = document.getElementById("hero-initial-intro");
+    const heroActiveDialogue = document.getElementById("hero-active-dialogue");
+    const userCard = document.getElementById("dialogue-user-card");
+    const userText = document.getElementById("user-dialogue-text");
+    const userTag = document.getElementById("user-speaker-tag");
+    const coachCard = document.getElementById("dialogue-coach-card");
+    const coachText = document.getElementById("coach-dialogue-text");
+    const coachTag = document.getElementById("coach-speaker-tag");
+    const coachSpeakerName = document.getElementById("coach-speaker-name");
+    const dynamicPillsGroup = document.getElementById("dynamic-pills-group");
+    const pillGroupFit = document.getElementById("pill-group-fit");
+    const pillGroupMeal = document.getElementById("pill-group-meal");
+
+    if (!heroActiveDialogue) return;
+
+    if (heroInitialIntro) heroInitialIntro.style.display = 'none';
+    heroActiveDialogue.style.display = 'block';
+
+    const currentMode = document.body.classList.contains('mealbuddy-page') ? 'nutrition' : 'fitness';
+
+    if (speaker === 'user') {
+        if (userCard && userText) {
+            userCard.style.display = 'flex';
+            userText.textContent = text;
+            userText.className = 'dialogue-text user-text' + (isInterim ? ' is-interim' : '');
+            if (userTag) {
+                userTag.className = 'dialogue-speaker-tag is-user' + (isInterim ? ' is-speaking' : '');
+            }
+        }
+    } else if (speaker === 'coach') {
+        const coachName = currentMode === 'nutrition' ? 'MealBuddy' : 'FitBuddy';
+        if (coachCard && coachText) {
+            coachCard.style.display = 'flex';
+            coachText.textContent = text;
+            coachText.className = 'dialogue-text coach-text' + (isInterim ? ' is-interim' : '');
+            if (coachSpeakerName) coachSpeakerName.textContent = coachName;
+            if (coachTag) {
+                coachTag.className = 'dialogue-speaker-tag is-coach' + (isInterim ? ' is-speaking' : '');
+            }
+        }
+    }
+
+    if (userCard) userCard.scrollTop = 0;
+    if (coachCard) coachCard.scrollTop = 0;
+
+    // Update dynamic pills in phone view if suggestions provided
+    if (suggestions && Array.isArray(suggestions) && suggestions.length > 0) {
+        if (pillGroupFit) pillGroupFit.style.display = 'none';
+        if (pillGroupMeal) pillGroupMeal.style.display = 'none';
+        if (dynamicPillsGroup) {
+            dynamicPillsGroup.style.display = 'contents';
+            dynamicPillsGroup.innerHTML = '';
+            suggestions.forEach(sugText => {
+                const pill = document.createElement("button");
+                pill.type = "button";
+                pill.className = "pill dynamic-pill";
+                pill.textContent = sugText;
+                pill.addEventListener("click", () => {
+                    if (chatInput.disabled || btnSend.classList.contains("btn-stop")) return;
+                    chatInput.value = sugText;
+                    updateMobileHUD("user", sugText, false);
+                    document.querySelector('.dashboard-grid')?.classList.add('has-conversation');
+                    btnSend.click();
+                });
+                dynamicPillsGroup.appendChild(pill);
+            });
+        }
+    }
+}
+
+function addChatMessage(role, text, isLoad = false, modeOverride = null, showSuggestions = true, serverSuggestions = null) {
     let currentActiveMode = document.body.classList.contains('mealbuddy-page') ? 'nutrition' : 'fitness';
     let targetMode = modeOverride || currentActiveMode;
 
     if (!isLoad) {
-        chatData[targetMode].push({ role, text });
+        chatData[targetMode].push({ role, text, suggestions: serverSuggestions });
+        saveStoredState();
         if (role === "user") {
             const introEl = document.querySelector('.intro-blur');
             if (introEl) introEl.classList.add('is-blurred');
             const twEl = document.querySelector('.typewriter');
             if (twEl) twEl.classList.add('is-blurred');
+            document.querySelector('.dashboard-grid')?.classList.add('has-conversation');
+            chatHistory.querySelectorAll('.chat-suggestions').forEach(el => el.remove());
         }
     }
 
@@ -268,12 +540,62 @@ function addChatMessage(role, text, isLoad = false, modeOverride = null) {
         avatar.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`;
     }
 
-    const msgBubble = document.createElement("div");
-    msgBubble.className = `chat-msg msg-${role}`;
-    msgBubble.textContent = text;
-    
-    wrapper.appendChild(avatar);
-    wrapper.appendChild(msgBubble);
+    if (role === 'coach') {
+        const contentCol = document.createElement("div");
+        contentCol.className = `chat-msg-column`;
+
+        const msgBubble = document.createElement("div");
+        msgBubble.className = `chat-msg msg-${role}`;
+        msgBubble.textContent = text;
+        contentCol.appendChild(msgBubble);
+
+        const hasInteracted = chatData[targetMode].some(m => m.role === 'user') || document.querySelector('.dashboard-grid')?.classList.contains('has-conversation');
+        let suggestions = [];
+        if (showSuggestions && hasInteracted) {
+            const userMsgs = chatData[targetMode].filter(m => m.role === 'user');
+            const lastUserMessage = userMsgs.length > 0 ? userMsgs[userMsgs.length - 1].text : '';
+            suggestions = (serverSuggestions && Array.isArray(serverSuggestions) && serverSuggestions.length > 0)
+                ? serverSuggestions
+                : getSuggestionsForCoachMessage(text, targetMode, lastUserMessage);
+
+            if (suggestions && suggestions.length > 0) {
+                chatHistory.querySelectorAll('.chat-suggestions').forEach(el => el.remove());
+                const sugContainer = document.createElement("div");
+                sugContainer.className = "chat-suggestions";
+                suggestions.forEach(sugText => {
+                    const pill = document.createElement("button");
+                    pill.type = "button";
+                    pill.className = "suggestion-pill";
+                    pill.textContent = sugText;
+                    pill.addEventListener("click", () => {
+                        if (chatInput.disabled || btnSend.classList.contains("btn-stop")) return;
+                        chatInput.value = sugText;
+                        document.querySelector('.dashboard-grid')?.classList.add('has-conversation');
+                        btnSend.click();
+                    });
+                    sugContainer.appendChild(pill);
+                });
+                contentCol.appendChild(sugContainer);
+            }
+        }
+
+        wrapper.appendChild(avatar);
+        wrapper.appendChild(contentCol);
+
+        if (targetMode === currentActiveMode) {
+            updateMobileHUD('coach', text, false, (suggestions && suggestions.length > 0) ? suggestions : null);
+        }
+    } else {
+        const msgBubble = document.createElement("div");
+        msgBubble.className = `chat-msg msg-${role}`;
+        msgBubble.textContent = text;
+        wrapper.appendChild(avatar);
+        wrapper.appendChild(msgBubble);
+
+        if (targetMode === currentActiveMode) {
+            updateMobileHUD('user', text, false);
+        }
+    }
 
     chatHistory.appendChild(wrapper);
     chatHistory.scrollTop = chatHistory.scrollHeight;
@@ -283,6 +605,7 @@ let typingIndicator = null;
 
 function showTypingIndicator() {
     if (typingIndicator) return;
+    chatHistory.querySelectorAll('.chat-suggestions').forEach(el => el.remove());
     typingIndicator = document.createElement("div");
     typingIndicator.className = `chat-msg-wrapper wrapper-coach typing-indicator-wrapper`;
     
@@ -314,16 +637,44 @@ function removeTypingIndicator() {
 
 function loadChatHistory(mode) {
     chatHistory.innerHTML = '';
-    chatData[mode].forEach(msg => {
-        addChatMessage(msg.role, msg.text, true, mode);
+    const messages = chatData[mode];
+    const hasUserMsg = chatData[mode].some(m => m.role === 'user');
+    
+    let lastCoachIndex = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'coach') {
+            lastCoachIndex = i;
+            break;
+        }
+    }
+
+    messages.forEach((msg, idx) => {
+        const isLastCoach = (idx === lastCoachIndex);
+        addChatMessage(msg.role, msg.text, true, mode, isLastCoach && hasUserMsg, msg.suggestions);
     });
     
-    // Blur intro text if user has interacted in this mode
-    const hasInteracted = chatData[mode].length > 2;
-    const introEl = document.querySelector('.intro-blur');
-    if (introEl) introEl.classList.toggle('is-blurred', hasInteracted);
-    const twEl = document.querySelector('.typewriter');
-    if (twEl) twEl.classList.toggle('is-blurred', hasInteracted);
+    // Toggle has-conversation based on whether user has messages
+    const dashboardGrid = document.querySelector('.dashboard-grid');
+    if (dashboardGrid) {
+        dashboardGrid.classList.toggle('has-conversation', hasUserMsg);
+    }
+
+    if (hasUserMsg) {
+        let lastUser = null;
+        let lastCoach = null;
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (!lastCoach && messages[i].role === 'coach') lastCoach = messages[i];
+            if (!lastUser && messages[i].role === 'user') lastUser = messages[i];
+            if (lastCoach && lastUser) break;
+        }
+        if (lastUser) updateMobileHUD('user', lastUser.text, false);
+        if (lastCoach) {
+            const sugs = lastCoach.suggestions || getSuggestionsForCoachMessage(lastCoach.text, mode, lastUser ? lastUser.text : '');
+            updateMobileHUD('coach', lastCoach.text, false, sugs);
+        }
+    } else {
+        resetMobileHUD(mode);
+    }
 }
 
 // Voice Selection logic
@@ -402,6 +753,7 @@ function playAudio(text, audioUrl, mode) {
             setAvatarState("speaking");
             coachStatus.textContent = "Speaking...";
             updateMicIcon("stop");// Rhythmic avatar lip-sync pulse while playing Edge TTS audio (fallback/legacy)
+            document.getElementById("dialogue-speaker-tag")?.classList.add("is-speaking");
             edgeTtsPulseInterval = setInterval(() => {
                 if (window.bullAvatar && window.bullAvatar.wordPulse) {
                     window.bullAvatar.wordPulse(mode);
@@ -414,6 +766,7 @@ function playAudio(text, audioUrl, mode) {
             setAvatarState("idle");
             coachStatus.textContent = "Ready";
             updateMicIcon("mic");
+            document.getElementById("dialogue-speaker-tag")?.classList.remove("is-speaking");
         };
 
         currentAudio.onerror = (err) => {
@@ -451,6 +804,7 @@ function speakText(text, mode) {
         setAvatarState("speaking");
         coachStatus.textContent = "Speaking...";
         updateMicIcon("stop");
+        document.getElementById("dialogue-speaker-tag")?.classList.add("is-speaking");
     };
 
     // Trigger the avatar's word pulse precisely when each word is spoken!
@@ -464,6 +818,7 @@ function speakText(text, mode) {
         setAvatarState("idle");
         coachStatus.textContent = "Ready";
         updateMicIcon("mic");
+        document.getElementById("dialogue-speaker-tag")?.classList.remove("is-speaking");
     };
 
     utterance.onerror = (event) => {
@@ -472,6 +827,7 @@ function speakText(text, mode) {
         setAvatarState("idle");
         coachStatus.textContent = "Ready";
         updateMicIcon("mic");
+        document.getElementById("dialogue-speaker-tag")?.classList.remove("is-speaking");
     };
 
     synthesis.speak(utterance);
@@ -539,6 +895,7 @@ btnSend.addEventListener("click", async () => {
     resetChatControls();
     setAvatarState("thinking");
     coachStatus.textContent = "Thinking...";
+    updateMobileHUD("coach", "Thinking...", true);
     showTypingIndicator();
     btnSend.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>`;
     btnSend.classList.add("btn-stop");
@@ -565,7 +922,7 @@ btnSend.addEventListener("click", async () => {
         if (response.ok) {
             const data = await response.json();
             const coachText = data.response || "Here is your plan!";
-            addChatMessage("coach", coachText, false, currentMode);
+            addChatMessage("coach", coachText, false, currentMode, true, data.suggestions);
             
             let currentActiveMode = document.body.classList.contains('mealbuddy-page') ? 'nutrition' : 'fitness';
             if (currentMode === currentActiveMode) {
@@ -578,6 +935,7 @@ btnSend.addEventListener("click", async () => {
             // If the AI generated a plan, display it
             if (data.plan_data) {
                 planDataStore[currentMode] = data.plan_data;
+                saveStoredState();
                 
                 // Show notification dot for new plan
                 const desktopNotif = document.getElementById("desktop-plan-notif");
@@ -867,8 +1225,24 @@ window.addEventListener('DOMContentLoaded', () => {
         if (floatieMainText) floatieMainText.innerHTML = `Your Meal Plan <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg><span id="desktop-plan-notif" class="pulse-notif" style="display: none; width: 8px; height: 8px; background: #e74c3c; border-radius: 50%; margin-left: 2px;"></span>`;
         if (floatieIcon) floatieIcon.innerHTML = `<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"></path><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"></path>`;
     }
-    loadChatHistory(isMealBuddy ? 'nutrition' : 'fitness');
+    const activeMode = isMealBuddy ? 'nutrition' : 'fitness';
+    loadChatHistory(activeMode);
+    if (planDataStore[activeMode]) {
+        renderPlan(planDataStore[activeMode]);
+    }
     // Don't auto-speak on load to prevent browser autoplay blocking, wait for user interaction
+
+    // Attach click listeners to initial pills
+    document.querySelectorAll('#pill-row .pill[data-prompt]').forEach(pill => {
+        pill.addEventListener('click', () => {
+            if (chatInput.disabled || btnSend.classList.contains('btn-stop')) return;
+            const prompt = pill.dataset.prompt;
+            chatInput.value = prompt;
+            updateMobileHUD('user', prompt, false);
+            document.querySelector('.dashboard-grid')?.classList.add('has-conversation');
+            btnSend.click();
+        });
+    });
 
 
 
@@ -998,7 +1372,76 @@ window.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // Reset session listeners
+    const btnResetChat = document.getElementById('btn-reset-chat');
+    const mobileMenuReset = document.getElementById('mobile-menu-reset');
+    if (btnResetChat) {
+        btnResetChat.addEventListener('click', (e) => {
+            e.stopPropagation();
+            resetSession();
+        });
+    }
+    if (mobileMenuReset) {
+        mobileMenuReset.addEventListener('click', () => {
+            const burger = document.getElementById('nav-burger');
+            const menu = document.getElementById('mobile-menu');
+            if (burger) burger.classList.remove('open');
+            if (menu) menu.classList.remove('open');
+            resetSession();
+        });
+    }
 });
+
+function resetSession(mode = null) {
+    const activeMode = mode || (document.body.classList.contains('mealbuddy-page') ? 'nutrition' : 'fitness');
+
+    // Fresh session ID for backend conversation memory
+    sessions[activeMode] = (activeMode === 'nutrition' ? 'nutri_' : 'fit_') + Math.floor(Math.random() * 10000);
+    chatData[activeMode] = JSON.parse(JSON.stringify(DEFAULT_CHAT_DATA[activeMode]));
+    planDataStore[activeMode] = null;
+    saveStoredState();
+
+    // Re-render chat history with initial coach intro
+    loadChatHistory(activeMode);
+    renderPlan(null);
+
+    // Reset mobile dialogue HUD
+    resetMobileHUD(activeMode);
+
+    // Reset hero intro text & blurred state
+    const introEl = document.querySelector('.intro-blur');
+    if (introEl) introEl.classList.remove('is-blurred');
+    const twEl = document.querySelector('.typewriter');
+    if (twEl) twEl.classList.remove('is-blurred');
+    document.querySelector('.dashboard-grid')?.classList.remove('has-conversation');
+
+    // Hide notification dots
+    const desktopNotif = document.getElementById("desktop-plan-notif");
+    const mobileNotif = document.getElementById("mobile-plan-notif");
+    if (desktopNotif) desktopNotif.style.display = "none";
+    if (mobileNotif) mobileNotif.style.display = "none";
+
+    // Close any open bottom sheets
+    const chatSheet = document.getElementById('chat-sheet');
+    const planSheet = document.getElementById('plan-sheet');
+    const sheetBackdrop = document.getElementById('sheet-backdrop');
+    if (chatSheet) chatSheet.classList.remove('open');
+    if (planSheet) planSheet.classList.remove('open');
+    if (sheetBackdrop) sheetBackdrop.classList.remove('active');
+
+    // Reset audio and avatar state
+    if (currentAudio && !currentAudio.paused) {
+        stopAudioPlayback();
+    }
+    if (synthesis && synthesis.speaking) {
+        synthesis.cancel();
+    }
+    setAvatarState("idle");
+    coachStatus.textContent = "Ready";
+
+    showToast("Started a new conversation!", "success");
+}
 
 function showToast(message, type = "error") {
     // Remove existing toast if present
@@ -1014,6 +1457,8 @@ function showToast(message, type = "error") {
     icon.className = "toast-icon";
     if (type === "error") {
         icon.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+    } else {
+        icon.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
     }
     
     const text = document.createElement("div");
