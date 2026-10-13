@@ -1259,7 +1259,7 @@ window.addEventListener('DOMContentLoaded', () => {
         if (chatSheet) chatSheet.classList.remove('open');
         if (planSheet) planSheet.classList.remove('open');
         if (sheetBackdrop) sheetBackdrop.classList.remove('active');
-        // Restore focus to opening button could be added here
+        document.body.classList.remove('plan-open');
     }
 
     const desktopBtnOpenPlan = document.getElementById('desktop-btn-open-plan');
@@ -1267,6 +1267,12 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (desktopBtnOpenPlan) {
         desktopBtnOpenPlan.addEventListener('click', () => {
+            const isOpen = planSheet && planSheet.classList.contains('open');
+            if (isOpen) {
+                closeAllSheets();
+                return;
+            }
+
             const desktopNotif = document.getElementById("desktop-plan-notif");
             const mobileNotif = document.getElementById("mobile-plan-notif");
             if (desktopNotif) desktopNotif.style.display = "none";
@@ -1275,6 +1281,7 @@ window.addEventListener('DOMContentLoaded', () => {
             closeAllSheets();
             planSheet.classList.add('open');
             sheetBackdrop.classList.add('active');
+            document.body.classList.add('plan-open');
         });
     }
 
@@ -1296,6 +1303,7 @@ window.addEventListener('DOMContentLoaded', () => {
             closeAllSheets();
             planSheet.classList.add('open');
             sheetBackdrop.classList.add('active');
+            document.body.classList.add('plan-open');
         });
     }
 
