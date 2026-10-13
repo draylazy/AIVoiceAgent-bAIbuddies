@@ -71,54 +71,15 @@ const synthesis = window.speechSynthesis;
 let recognition = null;
 let isListening = false;
 
-// Global Audio Player for Edge TTS streaming
-let currentAudio = document.createElement('audio');
-currentAudio.setAttribute('playsinline', '');
-currentAudio.setAttribute('webkit-playsinline', '');
-currentAudio.preload = 'auto';
-document.body.appendChild(currentAudio);
-
-// Mobile & iOS Audio Unlocker (primes HTMLAudioElement and SpeechSynthesis on first user touch/tap)
-let audioUnlocked = false;
-function unlockAudio() {
-    if (audioUnlocked) return;
-
-    try {
-        if (currentAudio) {
-            // Prime with a tiny 44-byte silent WAV to grant iOS autoplay permission
-            currentAudio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFRm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-            const p = currentAudio.play();
-            if (p !== undefined) {
-                p.then(() => {
-                    currentAudio.pause();
-                    currentAudio.currentTime = 0;
-                    audioUnlocked = true;
-                }).catch(() => {});
-            }
-        }
-    } catch (e) {
-        console.warn("Could not unlock audio element:", e);
-    }
-
-    try {
-        if (synthesis) {
-            const u = new SpeechSynthesisUtterance("");
-            u.volume = 0;
-            synthesis.speak(u);
-        }
-    } catch (e) {
-        console.warn("Could not unlock speech synthesis:", e);
-    }
-}
-
-// Prime audio on the very first touch or click anywhere on the page
-['click', 'touchstart'].forEach(evt => {
-    window.addEventListener(evt, () => unlockAudio(), { once: true, passive: true });
-});
-
-// Backward-compatible alias
+// Speech Synthesis mobile unlock
+let speechUnlocked = false;
 function unlockSpeech() {
-    unlockAudio();
+    if (!speechUnlocked && synthesis) {
+        const u = new SpeechSynthesisUtterance("");
+        u.volume = 0;
+        synthesis.speak(u);
+        speechUnlocked = true;
+    }
 }
 
 function updateMicIcon(state) {
@@ -722,21 +683,20 @@ function loadVoices() {
     const voices = synthesis.getVoices();
     if (!voices.length) return;
 
-    // Prefer natural English male voices across platforms (Windows, iOS, macOS, Android)
+    // Attempt to find a suitable high-quality male voice
     preferredVoice =
-        voices.find(v => v.name.includes('Natural') && v.name.includes('en-US') && !v.name.includes('Female')) ||
-        // iOS / macOS Apple English male voices (Daniel, Alex, Aaron, Arthur)
-        voices.find(v => (v.name.includes('Daniel') || v.name.includes('Alex') || v.name.includes('Arthur') || v.name.includes('Aaron')) && v.lang.startsWith('en')) ||
-        voices.find(v => v.name.includes('Microsoft Christopher')) ||
         voices.find(v => v.name.includes('Microsoft David')) ||
-        voices.find(v => v.name.includes('Microsoft Mark')) ||
         voices.find(v => v.name.includes('Google US English Male')) ||
+        voices.find(v => v.name.includes('Microsoft Mark')) ||
         voices.find(v => v.name.toLowerCase().includes('male') && v.lang.includes('en-US')) ||
-        voices.find(v => v.lang === 'en-US' && !v.name.includes('Fred') && !v.name.includes('Samantha') && !v.name.includes('Victoria')) ||
-        voices.find(v => v.lang === 'en-US' && !v.name.includes('Fred')) ||
-        voices.find(v => v.lang.startsWith('en')) ||
+        voices.find(v => v.lang === 'en-US' && !v.name.includes('Fred')) || // Avoid 'Fred' (very robotic)
+        voices.find(v => v.lang === 'en-US') ||
         voices[0];
 }
+
+let currentAudio = document.createElement('audio');
+currentAudio.crossOrigin = "anonymous";
+document.body.appendChild(currentAudio);
 
 let audioContext = null;
 let audioAnalyzer = null;
@@ -788,12 +748,11 @@ function playAudio(text, audioUrl, mode) {
     if (audioUrl) {
         const fullAudioUrl = audioUrl.startsWith('http') ? audioUrl : `${API_URL}${audioUrl}`;
         currentAudio.src = fullAudioUrl;
-        currentAudio.load(); // Essential for iOS WebKit when loading dynamic audio
 
         currentAudio.onplay = () => {
             setAvatarState("speaking");
             coachStatus.textContent = "Speaking...";
-            updateMicIcon("stop");
+            updateMicIcon("stop");// Rhythmic avatar lip-sync pulse while playing Edge TTS audio (fallback/legacy)
             document.getElementById("dialogue-speaker-tag")?.classList.add("is-speaking");
             edgeTtsPulseInterval = setInterval(() => {
                 if (window.bullAvatar && window.bullAvatar.wordPulse) {
@@ -816,14 +775,11 @@ function playAudio(text, audioUrl, mode) {
             speakText(text, mode);
         };
 
-        const playPromise = currentAudio.play();
-        if (playPromise !== undefined) {
-            playPromise.catch(err => {
-                console.warn("Edge TTS playback blocked or error, falling back to Web Speech API:", err);
-                stopAudioPlayback();
-                speakText(text, mode);
-            });
-        }
+        currentAudio.play().catch(err => {
+            console.warn("Edge TTS playback blocked or error, falling back to Web Speech API:", err);
+            stopAudioPlayback();
+            speakText(text, mode);
+        });
     } else {
         speakText(text, mode);
     }
